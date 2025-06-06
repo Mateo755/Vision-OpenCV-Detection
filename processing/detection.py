@@ -15,7 +15,7 @@ class ObjectTracker:
             for obj_id, data in self.tracked.items():
                 prev_cx, prev_cy = data['centroid']
                 dist = np.hypot(cx - prev_cx, cy - prev_cy)
-                if dist < 50:
+                if dist < 60:
                     matched_id = obj_id
                     break
             if matched_id is not None:
@@ -38,6 +38,10 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         "ciezarowy_prawo_lewo": 0
     }
 
+    strefa_lewo = ((125, 117), (882, 342))
+    #strefa_lewo = ((100, 117), (476, 337))
+    strefa_prawo = ((127, 385), (963, 611))
+
     background = cv2.imread(background_path)
     if background is None:
         print("Nie można załadować background.jpg")
@@ -52,11 +56,13 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         ret, frame = cap.read()
         if not ret:
             break
-
         line_y = int(frame.shape[0] * 0.6)
-        mid_x = frame.shape[1] // 2
-        cv2.line(frame, (0, line_y), (frame.shape[1], line_y), (255, 0, 0), 2)
-        cv2.line(frame, (mid_x, 0), (mid_x, frame.shape[0]), (0, 255, 255), 1)
+        
+        if show:
+            cv2.rectangle(frame, strefa_lewo[0], strefa_lewo[1], (255, 0, 0), 2)
+            cv2.rectangle(frame, strefa_prawo[0], strefa_prawo[1], (0, 255, 255), 2)
+                  # Rysowanie linii dla pieszych
+            cv2.line(frame, (0, line_y), (frame.shape[1], line_y), (255, 0, 0), 2)
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         diff = cv2.absdiff(background_gray, gray)
@@ -66,11 +72,18 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=9)
 
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Znajdowanie konturów z hierarchią
+        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+
+        valid_contours = []
+        if hierarchy is not None:
+            for i, cnt in enumerate(contours):
+                if hierarchy[0][i][3] == -1:  # Tylko kontury zewnętrzne (bez rodzica)
+                    valid_contours.append(cnt)
 
         frame_objects = []
         centroids = []
-        for contour in contours:
+        for contour in valid_contours:
             area = cv2.contourArea(contour)
             if area < 1000:
                 continue
@@ -112,24 +125,23 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         tracked = tracker.update(centroids)
         for obj_id, cx, cy in tracked:
             history = tracker.tracked[obj_id]['history']
-            if len(history) >= 2 and obj_id not in tracker.counted_ids:
-                dx = history[-1] - history[0]
-                if abs(dx) > 50:
-                    direction = "lewo_prawo" if dx > 0 else "prawo_lewo"
-                    label = next((o["label"] for o in frame_objects if o["centroid"] == (cx, cy)), None)
-                    if label == "osobowy":
-                        counts[f"osobowy_{direction}"] += 1
-                    elif label == "ciezarowy/autobus":
-                        counts[f"ciezarowy_{direction}"] += 1
-                    tracker.counted_ids.add(obj_id)
+            if obj_id not in tracker.counted_ids:
+                if strefa_lewo[0][0] <= cx <= strefa_lewo[1][0] and strefa_lewo[0][1] <= cy <= strefa_lewo[1][1]:
+                    direction = "prawo_lewo"
+                elif strefa_prawo[0][0] <= cx <= strefa_prawo[1][0] and strefa_prawo[0][1] <= cy <= strefa_prawo[1][1]:
+                    direction = "lewo_prawo"
+                else:
+                    continue
 
-                    if show:
-                        arrow = "→" if dx > 0 else "←"
-                        cv2.putText(frame, arrow, (cx + 10, cy),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+                label = next((o["label"] for o in frame_objects if o["centroid"] == (cx, cy)), None)
+                if label == "osobowy":
+                    counts[f"osobowy_{direction}"] += 1
+                elif label == "ciezarowy/autobus":
+                    counts[f"ciezarowy_{direction}"] += 1
+                tracker.counted_ids.add(obj_id)
 
-                    print(f"[LICZNIK] Osobowe: ← {counts['osobowy_prawo_lewo']} | → {counts['osobowy_lewo_prawo']} | "
-                          f"Ciężarowe: ← {counts['ciezarowy_prawo_lewo']} | → {counts['ciezarowy_lewo_prawo']}")
+                print(f"[LICZNIK] Osobowe: ← {counts['osobowy_prawo_lewo']} | → {counts['osobowy_lewo_prawo']} | "
+                      f"Ciężarowe: ← {counts['ciezarowy_prawo_lewo']} | → {counts['ciezarowy_lewo_prawo']}")
 
         if show:
             cv2.imshow("Detekcja zmian", frame)
