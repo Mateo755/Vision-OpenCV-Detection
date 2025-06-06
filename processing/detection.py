@@ -110,6 +110,10 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
             x, y, w, h = cv2.boundingRect(contour)
             cx = x + w // 2
             cy = y + h // 2
+
+            if h < 50:
+                continue
+            #print(f"x:{x}, y:{y}, w:{w}, h:{h}")
             centroids.append((cx, cy))
 
             aspect_ratio = max(w, h) / min(w, h)
