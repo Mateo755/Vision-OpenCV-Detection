@@ -64,7 +64,8 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         "osobowy_prawo_lewo": 0,
         "ciezarowy_lewo_prawo": 0,
         "ciezarowy_prawo_lewo": 0,
-        "tramwaj": 0  
+        "tramwaj": 0,  
+        "pieszy": 0
     }
 
     background = cv2.imread(background_path)
@@ -78,9 +79,9 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         cv2.namedWindow("Detekcja zmian", cv2.WINDOW_NORMAL)
 
     # Zdefiniuj strefy
-    strefa_lewo = ((300, 170), (600, 342))
-    strefa_prawo = ((300, 385), (800, 611))
-    strefa_tramwaju = ((10, 365), (1920, 433))
+    strefa_lewo = ((300, 110), (600, 342))
+    strefa_prawo = ((300, 355), (800, 611))
+    strefa_tramwaju = ((10, 365), (1920, 520))
    
 
     while True:
@@ -93,7 +94,7 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         cv2.rectangle(frame, strefa_lewo[0], strefa_lewo[1], (255, 0, 0), 2)
         cv2.rectangle(frame, strefa_prawo[0], strefa_prawo[1], (0, 255, 0), 2)
         cv2.rectangle(frame, strefa_tramwaju[0], strefa_tramwaju[1], (0, 0, 255), 2)
-
+        cv2.line(frame, (0, int(frame.shape[0] * 0.6)), (frame.shape[1], int(frame.shape[0] * 0.6)), (0,255,255), 2)
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         diff = cv2.absdiff(background_gray, gray)
@@ -102,6 +103,7 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=9)
+        #edges = cv2.Canny(thresh, 50, 200)  # możesz eksperymentować z progami
 
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -122,8 +124,6 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
             #print(f"x:{x}, y:{y}, w:{w}, h:{h}")
             centroids.append((cx, cy))
 
-
-            #print(f"x:{x}, y:{y}, w:{w}, h:{h}")
 
 
             aspect_ratio = max(w, h) / min(w, h)
@@ -151,12 +151,16 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
                 if mean_h < 110 and h > 220 and w> 900:
                     label = "tramwaj"
                     color = (0, 255, 255)
+                else:
+                    label = None  # brak ważnego obiektu
             
             else:
-                label = "pieszy/rowerzysta"
+                label = "pieszy"
                 color = (0, 0, 255)
 
-            #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}")
+            #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
+            if label is None:
+                continue
 
             frame_objects.append({
                 "label": label,
@@ -178,15 +182,23 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
 
             label = next((o["label"] for o in frame_objects if o["centroid"] == (cx, cy)), None)
 
+            if label == "pieszy":
+                counts["pieszy"] += 1
+                tracker.counted_ids.add(obj_id)
+                print(f"[PIESZY] Pieszy wykryty! Liczba: {counts['pieszy']}")
+                continue  
+            
+                   
             if label == "tramwaj":
                 counts["tramwaj"] += 1
                 tracker.counted_ids.add(obj_id)
-                continue  # NIE IDZIEMY DO SPRAWDZANIA STREFY LEWO/PRAWO
+                print(f"[TRAMWAJ] Tramwaj wykryty! Liczba: {counts['tramwaj']}")
+                continue  
 
             # Potem reszta dla aut
-            if strefa_lewo[0][0] <= cx <= strefa_lewo[1][0] and strefa_lewo[0][1] <= cy <= strefa_lewo[1][1]:
+            if strefa_lewo[0][0] <= cx <= strefa_lewo[1][0] and strefa_lewo[0][1] <= cy <= strefa_lewo[1][1] and 110 < bottom_y < 342 :
                 direction = "prawo_lewo"
-            elif strefa_prawo[0][0] <= cx <= strefa_prawo[1][0] and strefa_prawo[0][1] <= cy <= strefa_prawo[1][1]:
+            elif strefa_prawo[0][0] <= cx <= strefa_prawo[1][0] and strefa_prawo[0][1] <= cy <= strefa_prawo[1][1] and 447 < bottom_y < 711:
                 direction = "lewo_prawo"
             else:
                 continue  # Auto nie w żadnej strefie — pomiń
@@ -199,9 +211,10 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
             tracker.counted_ids.add(obj_id)
 
             print(f"[LICZNIK] Osobowe: ← {counts['osobowy_prawo_lewo']} | → {counts['osobowy_lewo_prawo']} | "
-                  f"Ciężarowe: ← {counts['ciezarowy_prawo_lewo']} | → {counts['ciezarowy_lewo_prawo']} || Tramwaje: {counts['tramwaj']}")
+                  f"Ciężarowe: ← {counts['ciezarowy_prawo_lewo']} | → {counts['ciezarowy_lewo_prawo']} || Tramwaje: {counts['tramwaj']} || Piesi: {counts['pieszy']}")
 
         if show:
+            #cv2.imshow("Threshold", edges)
             cv2.imshow("Detekcja zmian", frame)
             key = cv2.waitKey(1)
             if key == 27:
