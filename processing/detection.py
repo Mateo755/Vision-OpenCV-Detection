@@ -37,7 +37,7 @@ class ObjectTracker:
 
         return best_id, descriptor
 
-    def update(self, current_centroids, frame_objects, frame_rgb):
+    def update(self, current_centroids, frame_objects, frame_rgb, frame_number):
         updated = []
         for cx, cy in current_centroids:
             matched_id = None
@@ -84,7 +84,9 @@ class ObjectTracker:
                     'centroid': (cx, cy),
                     'descriptor': descriptor,
                     'bbox': (x, y, w, h),
-                    'counted': False
+                    'counted': False,
+                    'first_seen_frame': frame_number,
+                    'confirmed': False
                 }
                 updated.append((assigned_id, cx, cy))
 
@@ -99,7 +101,7 @@ class ObjectTracker:
 
     def is_stable(self, obj_id):
         return True
-    
+
     def iou_with_tram_zone(self, bbox, tram_zone):
         x1, y1, w1, h1 = bbox
         x2, y2 = x1 + w1, y1 + h1
@@ -124,9 +126,11 @@ class ObjectTracker:
 
 
 
+
 def detect_from_background_image(cap: cv2.VideoCapture, background_path="background.jpg", show=True) -> list[dict]:
     detected_objects = []
     tracker = ObjectTracker()
+    tramwaj_block_until = -1
     counts = {
         "osobowy_lewo_prawo": 0,
         "osobowy_prawo_lewo": 0,
@@ -148,8 +152,10 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
 
     strefa_lewo = ((300, 110), (600, 342))
     strefa_prawo = ((500, 355), (1000, 611))
-    strefa_tramwaju1 = ((0, 220), (280, 390))
-    strefa_tramwaju2 = ((620, 220), (900, 390))
+    strefa_tramwaju1 = ((0, 225), (280, 390))
+    strefa_tramwaju2 = ((620, 225), (900, 390))
+
+    strefa_piesi = ((776, 739), (1038, 982))
 
     while True:
         ret, frame = cap.read()
@@ -160,7 +166,11 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         cv2.rectangle(frame, strefa_prawo[0], strefa_prawo[1], (0, 255, 0), 2)
         cv2.rectangle(frame, strefa_tramwaju1[0], strefa_tramwaju1[1], (0, 0, 255), 2)
         cv2.rectangle(frame, strefa_tramwaju2[0], strefa_tramwaju2[1], (0, 0, 255), 2)
+
+        cv2.rectangle(frame, strefa_piesi[0], strefa_piesi[1], (180, 75, 120), 2)
+
         cv2.line(frame, (0, int(frame.shape[0] * 0.6)), (frame.shape[1], int(frame.shape[0] * 0.6)), (0,255,255), 2)
+        
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         diff = cv2.absdiff(background_gray, gray)
@@ -176,7 +186,7 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         centroids = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            if area < 1000:
+            if area < 4000:
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)
@@ -212,20 +222,22 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
                 else:
                     label = "osobowy"
                     color = (0, 255, 0)
-            elif strefa == "tory" and h > 200 and w > 1050 and area < 150000:
-                print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
+            elif strefa == "tory" and h > 200 and w > 800:
+                #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
                 label = "tramwaj"
                 color = (0, 255, 255)
 
             elif strefa == "chodnik":
-                if w < 100:
-                    label = "pieszy"
-                    color = (0, 0, 255)
+                if strefa_piesi[0][0] <= cx <= strefa_piesi[1][0] and strefa_piesi[0][1] <= cy <= strefa_piesi[1][1]:
+                    if area < 10000:
+                        label = "pieszy"
+                        color = (0, 0, 255)
+                        #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
 
             if label is None:
                 continue
 
-            #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
+           #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
 
             frame_objects.append({
                 "label": label,
@@ -238,7 +250,10 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
                 cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
                 cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-        tracked = tracker.update(centroids, frame_objects, frame)
+
+        frame_number = int(cap.get(cv2.CAP_PROP_POS_FRAMES))  # pobierz numer aktualnej klatki
+        tracked = tracker.update(centroids, frame_objects, frame, frame_number)
+
         for obj_id, cx, cy in tracked:
             if obj_id in tracker.counted_ids:
                 continue
@@ -249,16 +264,21 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
 
             label = next((o["label"] for o in frame_objects if o["centroid"] == (cx, cy)), None)
 
+            if label == "tramwaj":
+                frame_number = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+                if frame_number < tramwaj_block_until:
+                    continue  # zablokowane zliczanie tramwajów
+
+                counts["tramwaj"] += 1
+                tracker.counted_ids.add(obj_id)
+                tramwaj_block_until = frame_number + 125
+                print(f"[TRAMWAJ] Zliczono tramwaj. Kolejny możliwy po klatce {tramwaj_block_until}")
+                continue
+
             if label == "pieszy":
                 counts["pieszy"] += 1
                 tracker.counted_ids.add(obj_id)
                 print(f"[PIESZY] Pieszy wykryty! Liczba: {counts['pieszy']}")
-                continue
-            if label == "tramwaj":
-                counts["tramwaj"] += 1
-                tracker.counted_ids.add(obj_id)
-                print(f"[TRAMWAJ] Tramwaj wykryty! Liczba: {counts['tramwaj']}")
-      
                 continue
 
             if strefa_lewo[0][0] <= cx <= strefa_lewo[1][0] and strefa_lewo[0][1] <= cy <= strefa_lewo[1][1]:
@@ -275,9 +295,11 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
 
             tracker.counted_ids.add(obj_id)
             print(f"[LICZNIK] Osobowe: ← {counts['osobowy_prawo_lewo']} | → {counts['osobowy_lewo_prawo']} | "
-                  f"Ciężarowe: ← {counts['ciezarowy_prawo_lewo']} | → {counts['ciezarowy_lewo_prawo']} || Tramwaje: {counts['tramwaj']} || Piesi: {counts['pieszy']}")
+                f"Ciężarowe: ← {counts['ciezarowy_prawo_lewo']} | → {counts['ciezarowy_lewo_prawo']} || "
+                f"Tramwaje: {counts['tramwaj']} || Piesi: {counts['pieszy']}")
 
         if show:
+            #cv2.imshow("Thresholding", thresh)
             cv2.imshow("Detekcja zmian", frame)
             key = cv2.waitKey(1)
             if key == 27:
