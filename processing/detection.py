@@ -86,7 +86,8 @@ class ObjectTracker:
                     'bbox': (x, y, w, h),
                     'counted': False,
                     'first_seen_frame': frame_number,
-                    'confirmed': False
+                    'confirmed': False,
+                    'in_pedestrian_zone': False 
                 }
                 updated.append((assigned_id, cx, cy))
 
@@ -155,7 +156,7 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
     strefa_tramwaju1 = ((0, 225), (280, 390))
     strefa_tramwaju2 = ((620, 225), (900, 390))
 
-    strefa_piesi = ((776, 739), (1038, 982))
+    strefa_piesi = ((900, 739), (1100, 1020))
 
     while True:
         ret, frame = cap.read()
@@ -186,7 +187,7 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
         centroids = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            if area < 4000:
+            if area < 3000:
                 continue
 
             x, y, w, h = cv2.boundingRect(contour)
@@ -228,16 +229,14 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
                 color = (0, 255, 255)
 
             elif strefa == "chodnik":
-                if strefa_piesi[0][0] <= cx <= strefa_piesi[1][0] and strefa_piesi[0][1] <= cy <= strefa_piesi[1][1]:
-                    if area < 10000:
-                        label = "pieszy"
-                        color = (0, 0, 255)
-                        #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
+                    label = "pieszy"
+                    color = (0, 0, 255)
+                    #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}, ratio:{aspect_ratio}")
 
             if label is None:
                 continue
 
-           #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
+            #print(f"Label: {label}, bbox: {(x, y, w, h)}, bottom_y: {bottom_y}, area:{area}")
 
             frame_objects.append({
                 "label": label,
@@ -272,14 +271,25 @@ def detect_from_background_image(cap: cv2.VideoCapture, background_path="backgro
                 counts["tramwaj"] += 1
                 tracker.counted_ids.add(obj_id)
                 tramwaj_block_until = frame_number + 125
-                print(f"[TRAMWAJ] Zliczono tramwaj. Kolejny możliwy po klatce {tramwaj_block_until}")
+                #print(f"[TRAMWAJ] Zliczono tramwaj. Kolejny możliwy po klatce {tramwaj_block_until}")
                 continue
 
             if label == "pieszy":
-                counts["pieszy"] += 1
-                tracker.counted_ids.add(obj_id)
-                print(f"[PIESZY] Pieszy wykryty! Liczba: {counts['pieszy']}")
-                continue
+                in_zone = (
+                    strefa_piesi[0][0] <= cx <= strefa_piesi[1][0]
+                    and strefa_piesi[0][1] <= cy <= strefa_piesi[1][1]
+                )
+                obj_data['in_pedestrian_zone'] = in_zone
+
+                if obj_id in tracker.counted_ids and in_zone:
+                    continue  # pieszy już zliczony i nadal w strefie
+
+                if obj_id not in tracker.counted_ids and in_zone:
+                    counts["pieszy"] += 1
+                    tracker.counted_ids.add(obj_id)
+                    #print(f"[PIESZY] Zliczony. ID={obj_id}, centroid={cx, cy}")
+                    continue
+
 
             if strefa_lewo[0][0] <= cx <= strefa_lewo[1][0] and strefa_lewo[0][1] <= cy <= strefa_lewo[1][1]:
                 direction = "prawo_lewo"
