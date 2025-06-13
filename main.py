@@ -8,22 +8,28 @@ from processing.utils import perform_processing
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('videos_dir', type=str)
+    parser.add_argument('results_file', type=str)
+    args = parser.parse_args()
 
+    videos_dir = Path(args.videos_dir)
+    results_file = Path(args.results_file)
 
+    videos_paths = sorted([video_path for video_path in videos_dir.iterdir() if video_path.name.endswith('.mp4')])
     results = {}
-    cap = cv2.VideoCapture("./videos/wycinek_11m20s_12m02s_people.mp4")
-    #cap = cv2.VideoCapture("./videos/wycinek_8m25s_10m30s_variety.mp4")
-    #cap = cv2.VideoCapture("./videos/wycinek_2trams.mp4")
-    #cap = cv2.VideoCapture("./videos/wycinek_13m00s_14m00s.mp4")
-    #cap = cv2.VideoCapture("./videos/wycinek_0m25s_1m41s.mp4")
-    #cap = cv2.VideoCapture("./videos/wycinek_0m33s_2m10s.mp4")
-    if cap is None:
-        print('Error loading video')
-    else:
-        print('Processing video')
+    for video_path in videos_paths:
+        cap = cv2.VideoCapture(str(video_path))
+        if cap is None:
+            print(f'Error loading video {video_path}')
+            continue
+        else:
+            print(f'Processing video {video_path}')
 
-    perform_processing(cap)
+        results[video_path.name] = perform_processing(cap)
 
+    with results_file.open('w') as output_file:
+        json.dump(results, output_file, indent=4)
 
 
 if __name__ == '__main__':
