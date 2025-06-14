@@ -11,12 +11,12 @@ class ObjectTracker:
         """
         Inicjalizacja parametrów obiektu klasy
         """
-        self.tracked = {}           # Aktualnie śledzone obiekty: obj_id -> dane
-        self.counted_ids = set()    # Zbiór ID obiektów już zliczonych
-        self.object_id = 0          # Licznik do przypisywania nowych ID
-        self.prev_tracked = {}      # Dane z poprzedniej klatki (do porównania)
-        self.max_missed_frames = int(fps * max_seconds_missing)
-
+        self.tracked = {}                                           # Aktualnie śledzone obiekty: obj_id -> dane
+        self.counted_ids = set()                                    # Zbiór ID obiektów już zliczonych
+        self.object_id = 0                                          # Licznik do przypisywania nowych ID
+        self.prev_tracked = {}                                      # Dane z poprzedniej klatki (do porównania)
+        self.max_missed_frames = int(fps * max_seconds_missing)     # Maksymalna liczba kolejnych klatek, w których obiekt może być niewidoczny
+                                                                    # zanim zostanie usunięty ze śledzenia
     def compute_hog_descriptor(self, image):
         """
         Oblicza deskryptor HOG (Histogram of Oriented Gradients) z podanego fragmentu obrazu
@@ -90,19 +90,25 @@ class ObjectTracker:
 
         
         # Usuwanie obiektów, które zniknęły na zbyt długo
-        updated_ids = set(obj_id for obj_id, _, _ in updated)
+        
+        # Zbiera ID wszystkich obiektów, które zostały zaktualizowane (czyli wykryte w tej klatce)
+        updated_ids = set(obj_id for obj_id, _, _ in updated) 	   
+        
+        # Lista ID do późniejszego usunięcia
         to_remove = []
 
         for obj_id, data in self.tracked.items():
-            if obj_id in updated_ids:
+            if obj_id in updated_ids:                # Jeśli obiekt był widoczny, pomiń
                 continue
 
-            data['missed_frames'] += 1
+            data['missed_frames'] += 1               # Jeśli obiekt nie był widoczny, zwiększ licznik „nieobecności w kadrze"
+            
+            # Jeśli nie był widziany zbyt długo -> dodaj go do to_remove
             if data['missed_frames'] > self.max_missed_frames:
-                to_remove.append(obj_id)
+                to_remove.append(obj_id)             # Za długo niewidoczny — oznacz do usunięcia
 
         for obj_id in to_remove:
-            del self.tracked[obj_id]
+            del self.tracked[obj_id]                 # Każdy obiekt, który zniknie z obrazu i nie pojawi się przez 15 sekund, zostaje usunięty 
 
         return updated
 
