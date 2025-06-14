@@ -33,6 +33,9 @@ def detection(cap: cv2.VideoCapture, background_path="background.jpg", show=True
     Główna funkcja detekcji i zliczania obiektów pojawiających się na kolejnych kaltkach przetwarzanego wideo
     """
 
+    FPS = cap.get(cv2.CAP_PROP_FPS)
+    if debug: print(f"FPS: {FPS}")
+
     # Inicjalizacja trackera i zmiennych pomocniczych
     tracker = ObjectTracker()
     tramwaj_block_until = -1  # blokada zliczania tramwajów (dla uniknięcia wielokrotnego zliczania)
@@ -169,6 +172,7 @@ def detection(cap: cv2.VideoCapture, background_path="background.jpg", show=True
                     color = (0, 255, 255)
 
             elif strefa == "chodnik":
+                if w > 60 and h > 110:
                     label = "pieszy"
                     color = (0, 0, 255)
 
@@ -208,17 +212,18 @@ def detection(cap: cv2.VideoCapture, background_path="background.jpg", show=True
             obj_data = tracker.tracked[obj_id]
 
             # Odtworzenie etykiety (label) dla danego obiektu, szukając jej po jego (cx, cy) w danych detekcji
-            label = next((o["label"] for o in frame_objects if o["centroid"] == (cx, cy)), None)  
+            label = next((obj["label"] for obj in frame_objects if obj["centroid"] == (cx, cy)), None)  
 
             # Zliczanie tramwajów z blokadą czasową
             if label == "tramwaj":
+                tramwaj_time_ban = 5
                 frame_number = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
                 if frame_number < tramwaj_block_until:
                     continue  # zablokowane zliczanie tramwajów
 
                 counts["tramwaj"] += 1
                 tracker.counted_ids.add(obj_id)
-                tramwaj_block_until = frame_number + 125
+                tramwaj_block_until = frame_number + FPS * tramwaj_time_ban
                 #print(f"[TRAMWAJ] Zliczono tramwaj. Kolejny możliwy po klatce {tramwaj_block_until}")
                 continue
             
