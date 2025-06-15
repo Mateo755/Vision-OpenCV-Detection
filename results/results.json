@@ -1,0 +1,20 @@
+{
+    "wycinek_0m25s_1m41s.mp4": {
+        "liczba_samochodow_osobowych_z_prawej_na_lewa": 25,
+        "liczba_samochodow_osobowych_z_lewej_na_prawa": 6,
+        "liczba_samochodow_ciezarowych_autobusow_z_prawej_na_lewa": 1,
+        "liczba_samochodow_ciezarowych_autobusow_z_lewej_na_prawa": 1,
+        "liczba_tramwajow": 1,
+        "liczba_pieszych": 2,
+        "liczba_rowerzystow": 0
+    },
+    "wycinek_0m33s_2m10s.mp4": {
+        "liczba_samochodow_osobowych_z_prawej_na_lewa": 9,
+        "liczba_samochodow_osobowych_z_lewej_na_prawa": 33,
+        "liczba_samochodow_ciezarowych_autobusow_z_prawej_na_lewa": 1,
+        "liczba_samochodow_ciezarowych_autobusow_z_lewej_na_prawa": 2,
+        "liczba_tramwajow": 1,
+        "liczba_pieszych": 1,
+        "liczba_rowerzystow": 0
+    }
+}
