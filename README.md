@@ -39,11 +39,10 @@ VISION-OPENCV-DETECTION/
 │   ├── Grand_Truth.txt
 │   └── results.json
 │
-├── videos/                         # Zestaw testowych nagrań wideo
-│   ├── 00000.mp4
-│   ├── wycinek_2trams.mp4
-│   └── ...
-└── Opis_projektu_2024_2025.pdf     # Specyfikacja projektu
+└──  videos/                         # Zestaw testowych nagrań wideo
+    ├── 00000.mp4
+    ├── wycinek_2trams.mp4
+    └── ...
 ```
 
 ## Konfiguracja projektu
