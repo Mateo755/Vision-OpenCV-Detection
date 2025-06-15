@@ -22,6 +22,7 @@ VISION-OPENCV-DETECTION/
 ├── main.py                         # Główny plik uruchomieniowy projektu
 ├── requirements.txt                # Lista zależności Pythona
 ├── README.md                       # Ten plik
+├── raport.md                       # Opis projektu
 ├── background.jpg                  # Obraz referencyjny tła do detekcji zmian
 │
 ├── extra_testing_utils/            # Skrypty używane podczas tworzenia projektu
